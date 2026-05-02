@@ -2,33 +2,6 @@
 #include <stdexcept>
 
 // =========================
-// Tensor4D
-// =========================
-
-Tensor4D::Tensor4D() : N(0), C(0), H(0), W(0) {}
-
-Tensor4D::Tensor4D(int n, int c, int h, int w)
-    : N(n), C(c), H(h), W(w), data(n * c * h * w, 0.0f) {
-    if (n < 0 || c < 0 || h < 0 || w < 0) {
-        throw std::invalid_argument("Tensor4D dimensions must be non-negative.");
-    }
-}
-
-float& Tensor4D::at(int n, int c, int h, int w) {
-    if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
-        throw std::out_of_range("Tensor4D::at index out of range.");
-    }
-    return data[((n * C + c) * H + h) * W + w];
-}
-
-const float& Tensor4D::at(int n, int c, int h, int w) const {
-    if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
-        throw std::out_of_range("Tensor4D::at index out of range.");
-    }
-    return data[((n * C + c) * H + h) * W + w];
-}
-
-// =========================
 // Conv2DConfig
 // =========================
 
@@ -70,13 +43,9 @@ Conv2DConfig::Conv2DConfig(
 // Conv2D
 // =========================
 
-Conv2D::Conv2D(const Conv2DConfig& config) : cfg(config) {
-    // weight shape: [out_c][in_c][k_h][k_w]
-    weight.resize(
-        cfg.out_channels * cfg.in_channels * cfg.kernel_h * cfg.kernel_w,
-        0.0f
-    );
-
+Conv2D::Conv2D(const Conv2DConfig& config)
+    : cfg(config),
+      weight(cfg.out_channels, cfg.in_channels, cfg.kernel_h, cfg.kernel_w) {
     if (cfg.use_bias) {
         bias.resize(cfg.out_channels, 0.0f);
     }
@@ -90,7 +59,7 @@ void Conv2D::set_weight(const std::vector<float>& w) {
         throw std::invalid_argument("set_weight: size mismatch.");
     }
 
-    weight = w;
+    weight.data = w;
 }
 
 void Conv2D::set_bias(const std::vector<float>& b) {
@@ -129,13 +98,6 @@ Tensor4D Conv2D::forward(const Tensor4D& input) const {
 
     Tensor4D output(input.N, cfg.out_channels, out_h, out_w);
 
-    // Helper lambda to access flattened weight
-    auto weight_at = [&](int oc, int ic, int kh, int kw) -> float {
-        const int idx =
-            ((oc * cfg.in_channels + ic) * cfg.kernel_h + kh) * cfg.kernel_w + kw;
-        return weight[idx];
-    };
-
     // Convolution
     for (int n = 0; n < input.N; ++n) {
         for (int oc = 0; oc < cfg.out_channels; ++oc) {
@@ -154,7 +116,7 @@ Tensor4D Conv2D::forward(const Tensor4D& input) const {
                                 // zero padding
                                 // calculate for valid input positions only
                                 if (ih >= 0 && ih < input.H && iw >= 0 && iw < input.W) {
-                                    sum += input.at(n, ic, ih, iw) * weight_at(oc, ic, kh, kw);
+                                    sum += input.at(n, ic, ih, iw) * weight.at(oc, ic, kh, kw);
                                 }
                             }
                         }

@@ -4,16 +4,7 @@
 #include <vector>
 #include <stdexcept>
 
-struct Tensor4D {
-    int N, C, H, W;
-    std::vector<float> data;
-
-    Tensor4D();
-    Tensor4D(int n, int c, int h, int w);
-
-    float& at(int n, int c, int h, int w);
-    const float& at(int n, int c, int h, int w) const;
-};
+#include "tensor.h"
 
 struct Conv2DConfig {
     int in_channels;
@@ -42,7 +33,7 @@ struct Conv2DConfig {
 class Conv2D {
 public:
     Conv2DConfig cfg;
-    std::vector<float> weight; // [out_c][in_c][k_h][k_w]
+    Tensor4D weight; // [out_c][in_c][k_h][k_w]
     std::vector<float> bias;   // [out_c]
 
     Conv2D(const Conv2DConfig& config);
