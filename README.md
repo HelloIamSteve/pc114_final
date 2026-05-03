@@ -1,4 +1,5 @@
-# pc114_midterm
+# pc114_final
+A LeNet implementation in C++, to compare the acceleration of Pthread / OpenMP and CUDA.
 
 ## To-do list:
 1. Implement fc_layer, AvgPool2D, Activation function (ReLU)
