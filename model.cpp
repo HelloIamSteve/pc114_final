@@ -88,6 +88,14 @@ void* threadRunner(void* arg) {
 }
 
 std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& input, int thread_num) const{
+    if (thread_num <= 0) {
+        throw std::invalid_argument("thread_num must be positive.");
+    }
+
+    if (thread_num > input.N) {
+        thread_num = input.N;
+    }
+    
     int n = input.N;
     int chunkSize = (n + thread_num - 1) / thread_num; // ceil(n / thread_num)
 

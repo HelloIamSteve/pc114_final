@@ -17,8 +17,10 @@ CXX = g++
 OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4 2>/dev/null)
 OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
 
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 $(OPENCV_CFLAGS)
-LDLIBS = $(OPENCV_LIBS)
+THREAD_FLAGS = -pthread
+
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 $(OPENCV_CFLAGS) $(THREAD_FLAGS)
+LDLIBS = $(OPENCV_LIBS) $(THREAD_FLAGS)
 
 TARGET = main
 MAIN_SRC = main.cpp

@@ -33,7 +33,11 @@ public:
           N(end_n - start_n),
           C(tensor.C),
           H(tensor.H),
-          W(tensor.W) {}
+          W(tensor.W) {
+            if (start_n < 0 || end_n > tensor.N || start_n > end_n) {
+                throw std::out_of_range("Tensor4DView: invalid batch range.");
+            }
+          }
 
     float at(int n, int c, int h, int w) const {
         return data[((n * C + c) * H + h) * W + w];
