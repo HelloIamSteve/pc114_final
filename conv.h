@@ -43,6 +43,14 @@ public:
 
     Tensor4D forward(const Tensor4D& input) const;
 
+    int getWeightSize() const {
+        return weight.N * weight.C * weight.H * weight.W;
+    }
+    
+    int getBiasSize() const {
+        return cfg.use_bias ? cfg.out_channels : 0;
+    }
+
 private:
     int output_height(int input_h) const;
     int output_width(int input_w) const;

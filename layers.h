@@ -104,6 +104,14 @@ public:
     void set_bias(const std::vector<float>& b);
 
     std::vector<float> forward(const std::vector<float>& input) const;
+
+    int getWeightSize() const {
+        return cfg.out_features * cfg.in_features;
+    }
+    
+    int getBiasSize() const {
+        return cfg.use_bias ? cfg.out_features : 0;
+    }
 };
 
 
