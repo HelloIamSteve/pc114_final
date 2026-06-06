@@ -6,7 +6,7 @@
 #include "tensor.h"
 #include "weight_loader.h"
 
-#include <iostream>
+#include <string>
 #include <vector>
 
 class LeNet {
@@ -48,6 +48,31 @@ public:
         out = fc3.forward(out);
 
         return out;
+    }
+
+    std::vector<std::vector<float>> forward_batch(const Tensor4D& input) const {
+        Tensor4D y = conv1.forward(input);
+        relu_inplace(y);
+        y = pool1.forward(y);
+
+        y = conv2.forward(y);
+        relu_inplace(y);
+        y = pool2.forward(y);
+
+        std::vector<std::vector<float>> batch_logits;
+        batch_logits.reserve(y.N);
+
+        for (int n = 0; n < y.N; ++n) {
+            std::vector<float> flattened = flatten(y, n);
+
+            std::vector<float> out = fc1.forward(flattened);
+            out = fc2.forward(out);
+            out = fc3.forward(out);
+
+            batch_logits.push_back(out);
+        }
+
+        return batch_logits;
     }
 };
 

@@ -20,7 +20,7 @@ OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2 $(OPENCV_CFLAGS)
 LDLIBS = $(OPENCV_LIBS)
 
-TARGET = lenet_test
+TARGET = main
 MAIN_SRC = main.cpp
 
 CORE_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp
@@ -52,7 +52,7 @@ tensor.o: tensor.cpp tensor.h
 conv.o: conv.cpp conv.h tensor.h
 layers.o: layers.cpp layers.h tensor.h
 weight_loader.o: weight_loader.cpp weight_loader.h conv.h layers.h tensor.h
-main.o: main.cpp conv.h layers.h tensor.h weight_loader.h
+main.o: main.cpp model.h conv.h layers.h tensor.h weight_loader.h
 
 run: $(TARGET)
 	./$(TARGET)
