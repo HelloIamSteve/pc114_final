@@ -230,3 +230,9 @@ __marimo__/
 
 # test code
 test*
+
+# model weights
+weights/*
+
+#vscode setting
+.vscode/

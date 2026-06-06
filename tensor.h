@@ -15,4 +15,11 @@ struct Tensor4D {
     const float& at(int n, int c, int h, int w) const;
 };
 
+Tensor4D load_image_as_tensor(
+    const std::string& image_path,
+    int target_h = 28,
+    int target_w = 28,
+    bool normalize = true
+);
+
 #endif
