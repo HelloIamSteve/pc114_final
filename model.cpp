@@ -2,6 +2,9 @@
 
 #include <string>
 #include <vector>
+#include <stdexcept>
+#include <pthread.h>
+#include <omp.h>
 
 std::vector<float> LeNet::forward(const Tensor4D& input) const{
     Tensor4D y = conv1.forward(input);
@@ -81,8 +84,8 @@ void* threadRunner(void* arg) {
     }
 
     Tensor4DView input_view(input, start, end);
-
-    model->forward_batch(input_view, output, start);
+   
+    model->forward_batch(input_view, output, start); // output[start:end] = forward_batch(input[start:end])
 
     return nullptr;
 }
@@ -132,4 +135,36 @@ std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& inp
     }
 
     return output;
+}
+
+std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& input, int thread_num) const {
+    if (thread_num <= 0) {
+        throw std::invalid_argument("thread_num must be positive.");
+    }
+
+    int n = input.N;
+
+    if (thread_num > n) {
+        thread_num = n;
+    }
+
+    std::vector<std::vector<float>> output(n);
+
+    #pragma omp parallel num_threads(thread_num)
+    {
+        int tid = omp_get_thread_num();
+
+        int chunkSize = (n + thread_num - 1) / thread_num;
+
+        int start = tid * chunkSize;
+        int end = (tid == thread_num - 1) ? n : (tid + 1) * chunkSize;
+
+        Tensor4DView input_view(input, start, end);
+
+        // output[start:end] = forward_batch(input[start:end])
+        forward_batch(input_view, output, start);
+    }
+
+    return output;
+
 }

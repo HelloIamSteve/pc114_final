@@ -89,5 +89,23 @@ int main(int argc, char* argv[]){
     std::cout << "Accuracy: " << acc << "%" << '\n';
     std::cout << "---------------" << '\n';
 
+    /* OpenMP version */
+    std::cout << "OpenMP version:" << '\n';
+
+    // start time
+    clock_gettime(CLOCK_REALTIME, &t_start);
+    std::vector<std::vector<float>> logits_openmp = lenet.forward_batch_openmp(test_set.images, THREAD_NUM);
+    
+    // end time
+    clock_gettime(CLOCK_REALTIME, &t_end);
+    elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
+	elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
+
+    std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+
+    acc = getAccuracy(logits_openmp, test_set.labels);
+    std::cout << "Accuracy: " << acc << "%" << '\n';
+    std::cout << "---------------" << '\n';
+
     return 0;
 }
