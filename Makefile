@@ -23,7 +23,7 @@ LDLIBS = $(OPENCV_LIBS)
 TARGET = main
 MAIN_SRC = main.cpp
 
-CORE_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp
+CORE_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp model.cpp
 CORE_OBJS = $(CORE_SRCS:.cpp=.o)
 
 MAIN_OBJ = $(MAIN_SRC:.cpp=.o)
@@ -52,6 +52,7 @@ tensor.o: tensor.cpp tensor.h
 conv.o: conv.cpp conv.h tensor.h
 layers.o: layers.cpp layers.h tensor.h
 weight_loader.o: weight_loader.cpp weight_loader.h conv.h layers.h tensor.h
+model.o: model.cpp model.h conv.h layers.h tensor.h weight_loader.h
 main.o: main.cpp model.h conv.h layers.h tensor.h weight_loader.h
 
 run: $(TARGET)

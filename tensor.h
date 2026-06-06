@@ -23,6 +23,23 @@ Tensor4D load_image_as_tensor(
     bool normalize = true
 );
 
+class Tensor4DView {
+public:
+    const float* data;
+    int N, C, H, W;
+
+    Tensor4DView(const Tensor4D& tensor, int start_n, int end_n)
+        : data(tensor.data.data() + start_n * tensor.C * tensor.H * tensor.W),
+          N(end_n - start_n),
+          C(tensor.C),
+          H(tensor.H),
+          W(tensor.W) {}
+
+    float at(int n, int c, int h, int w) const {
+        return data[((n * C + c) * H + h) * W + w];
+    }
+};
+
 struct TestingSet {
     Tensor4D images;
     std::vector<int> labels;

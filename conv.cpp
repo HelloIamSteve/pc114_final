@@ -74,31 +74,25 @@ void Conv2D::set_bias(const std::vector<float>& b) {
     bias = b;
 }
 
-int Conv2D::output_height(int input_h) const {
-    const int out_h = (input_h + 2 * cfg.pad_h - cfg.kernel_h) / cfg.stride_h + 1;
-    return out_h;
-}
+template <typename InputTensor>
+Tensor4D conv2d_forward_impl(const Conv2D& layer, const InputTensor& input) {
+    const Conv2DConfig& cfg = layer.cfg;
+    const Tensor4D& weight = layer.weight;
+    const std::vector<float>& bias = layer.bias;
 
-int Conv2D::output_width(int input_w) const {
-    const int out_w = (input_w + 2 * cfg.pad_w - cfg.kernel_w) / cfg.stride_w + 1;
-    return out_w;
-}
-
-Tensor4D Conv2D::forward(const Tensor4D& input) const {
     if (input.C != cfg.in_channels) {
-        throw std::invalid_argument("forward: input channel mismatch.");
+        throw std::invalid_argument("Conv2D::forward: input channel mismatch.");
     }
 
-    const int out_h = output_height(input.H);
-    const int out_w = output_width(input.W);
+    const int out_h = (input.H + 2 * cfg.pad_h - cfg.kernel_h) / cfg.stride_h + 1;;
+    const int out_w = (input.W + 2 * cfg.pad_w - cfg.kernel_w) / cfg.stride_w + 1;
 
     if (out_h <= 0 || out_w <= 0) {
-        throw std::invalid_argument("forward: invalid output shape. Check kernel/stride/padding.");
+        throw std::invalid_argument("Conv2D::forward: invalid output shape.");
     }
 
     Tensor4D output(input.N, cfg.out_channels, out_h, out_w);
 
-    // Convolution
     for (int n = 0; n < input.N; ++n) {
         for (int oc = 0; oc < cfg.out_channels; ++oc) {
             for (int oh = 0; oh < out_h; ++oh) {
@@ -106,17 +100,15 @@ Tensor4D Conv2D::forward(const Tensor4D& input) const {
                     float sum = cfg.use_bias ? bias[oc] : 0.0f;
 
                     for (int ic = 0; ic < cfg.in_channels; ++ic) {
-                        // Cross-correlation of
-                        // Weight [oc][ic] with Input [n][ic]
                         for (int kh = 0; kh < cfg.kernel_h; ++kh) {
                             for (int kw = 0; kw < cfg.kernel_w; ++kw) {
                                 const int ih = oh * cfg.stride_h - cfg.pad_h + kh;
                                 const int iw = ow * cfg.stride_w - cfg.pad_w + kw;
 
-                                // zero padding
-                                // calculate for valid input positions only
-                                if (ih >= 0 && ih < input.H && iw >= 0 && iw < input.W) {
-                                    sum += input.at(n, ic, ih, iw) * weight.at(oc, ic, kh, kw);
+                                if (ih >= 0 && ih < input.H &&
+                                    iw >= 0 && iw < input.W) {
+                                    sum += input.at(n, ic, ih, iw)
+                                         * weight.at(oc, ic, kh, kw);
                                 }
                             }
                         }
@@ -129,4 +121,12 @@ Tensor4D Conv2D::forward(const Tensor4D& input) const {
     }
 
     return output;
+}
+
+Tensor4D Conv2D::forward(const Tensor4D& input) const {
+    return conv2d_forward_impl(*this, input);
+}
+
+Tensor4D Conv2D::forward(const Tensor4DView& input) const {
+    return conv2d_forward_impl(*this, input);
 }
