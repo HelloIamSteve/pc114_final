@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <opencv2/opencv.hpp>
 #include <fstream>
+#include <sstream>
 
 namespace {
 

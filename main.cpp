@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <vector>
+#include <ctime>
 
 #include "tensor.h"
 #include "conv.h"
