@@ -41,8 +41,12 @@ public:
     void set_weight(const std::vector<float>& w);
     void set_bias(const std::vector<float>& b);
 
+    // for CPU
     Tensor4D forward(const Tensor4D& input) const;
-    Tensor4D forward(const Tensor4DView& input) const;
+    Tensor4D forward(const Tensor4DView& input) const;  // overload for batch processing
+
+    // for CUDA
+    CudaTensor4D forward_cuda(const CudaTensor4D& input, int block_size) const;
 
     int getWeightSize() const {
         return weight.N * weight.C * weight.H * weight.W;

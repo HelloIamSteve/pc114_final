@@ -63,11 +63,11 @@ $(TARGET): $(OBJS)
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 # Header dependencies.
-tensor.o: tensor.cu tensor.h
-conv.o: conv.cu conv.h tensor.h
-layers.o: layers.cu layers.h tensor.h
+tensor.o: tensor.cu tensor.h cuda_help.h
+conv.o: conv.cu conv.h tensor.h cuda_help.h
+layers.o: layers.cu layers.h tensor.h cuda_help.h
 weight_loader.o: weight_loader.cu weight_loader.h conv.h layers.h tensor.h
-model.o: model.cu model.h conv.h layers.h tensor.h weight_loader.h
+model.o: model.cu model.h conv.h layers.h tensor.h weight_loader.h cuda_help.h
 main.o: main.cu model.h conv.h layers.h tensor.h weight_loader.h
 
 run: $(TARGET)

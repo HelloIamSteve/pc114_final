@@ -1,4 +1,6 @@
 #include "layers.h"
+#include "tensor.h"
+#include "cuda_help.h"
 
 #include <algorithm>
 #include <limits>
@@ -44,6 +46,41 @@ void relu_vector_inplace(std::vector<float>& input) {
     }
 }
 
+// ============================================================
+// ReLU CUDA version
+// ============================================================
+
+__global__ void relu_kernel(float* data, int size) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < size && data[idx] < 0.0f) {
+        data[idx] = 0.0f;
+    }
+}
+
+void relu_cuda(CudaTensor4D& input, int block_size) {
+    if (block_size <= 0) {
+        throw std::invalid_argument("relu_cuda: block_size must be positive.");
+    }
+
+    dim3 blockSize(block_size);
+    dim3 gridSize((input.size() + blockSize.x - 1) / blockSize.x);
+
+    relu_kernel<<<gridSize, blockSize>>>(input.data, input.size());
+    CUDA_CHECK_KERNEL();
+}
+
+void relu_cuda(CudaMatrix& input, int block_size) {
+    if (block_size <= 0) {
+        throw std::invalid_argument("relu_cuda: block_size must be positive.");
+    }
+
+    dim3 blockSize(block_size);
+    dim3 gridSize((input.size() + blockSize.x - 1) / blockSize.x);
+
+    relu_kernel<<<gridSize, blockSize>>>(input.data, input.size());
+    CUDA_CHECK_KERNEL();
+}
 
 // ============================================================
 // AvgPool2DConfig
@@ -66,7 +103,6 @@ AvgPool2DConfig::AvgPool2DConfig(
         throw std::invalid_argument("AvgPool2DConfig: stride must be positive.");
     }
 }
-
 
 // ============================================================
 // AvgPool2D
@@ -118,6 +154,87 @@ Tensor4D AvgPool2D::forward(const Tensor4D& input) const {
     return output;
 }
 
+// ============================================================
+// AvgPool2D CUDA version
+// ============================================================
+
+__global__ void avgpool2d_kernel(
+    const float* input,
+    float* output,
+    int N,
+    int C,
+    int H,
+    int W,
+    int kernel_h,
+    int kernel_w,
+    int stride_h,
+    int stride_w,
+    int out_h,
+    int out_w
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int outputSize = N * C * out_h * out_w;
+
+    if (idx >= outputSize) {
+        return;
+    }
+
+    const int ow = idx % out_w;
+    const int oh = (idx / out_w) % out_h;
+    const int c = (idx / (out_h * out_w)) % C;
+    const int n = idx / (C * out_h * out_w);
+
+    float sum = 0.0f;
+
+    for (int kh = 0; kh < kernel_h; ++kh) {
+        for (int kw = 0; kw < kernel_w; ++kw) {
+            const int ih = oh * stride_h + kh;
+            const int iw = ow * stride_w + kw;
+            sum += input[((n * C + c) * H + ih) * W + iw];
+        }
+    }
+
+    output[((n * C + c) * out_h + oh) * out_w + ow] =
+        sum / static_cast<float>(kernel_h * kernel_w);
+}
+
+CudaTensor4D AvgPool2D::forward_cuda(const CudaTensor4D& input, int block_size) const {
+    if (block_size <= 0) {
+        throw std::invalid_argument("AvgPool2D::forward_cuda: block_size must be positive.");
+    }
+
+    const int out_h = output_height(input.H);
+    const int out_w = output_width(input.W);
+
+    if (out_h <= 0 || out_w <= 0) {
+        throw std::invalid_argument("AvgPool2D::forward_cuda: invalid output shape. Check kernel/stride.");
+    }
+
+    CudaTensor4D output(nullptr, input.N, input.C, out_h, out_w, true);
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), output.size() * sizeof(float)));
+
+    dim3 blockSize(block_size);
+    dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+
+    avgpool2d_kernel<<<gridSize, blockSize>>>(
+        input.data,
+        output.data,
+        input.N,
+        input.C,
+        input.H,
+        input.W,
+        cfg.kernel_h,
+        cfg.kernel_w,
+        cfg.stride_h,
+        cfg.stride_w,
+        out_h,
+        out_w
+    );
+
+    CUDA_CHECK_KERNEL();
+
+    return output;
+}
 
 // ============================================================
 // Flatten Layer
@@ -217,7 +334,6 @@ std::vector<float> Linear::forward(const std::vector<float>& input) const {
     return output;
 }
 
-
 // ============================================================
 // Utility
 // ============================================================
@@ -238,4 +354,92 @@ int argmax(const std::vector<float>& input) {
     }
 
     return best_index;
+}
+
+// ============================================================
+// Linear CUDA version
+// ============================================================
+
+__global__ void linear_kernel(
+    const float* input,
+    const float* weight,
+    const float* bias,
+    float* output,
+    int N,
+    int in_features,
+    int out_features,
+    bool use_bias
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int outputSize = N * out_features;
+
+    if (idx >= outputSize) {
+        return;
+    }
+
+    const int of = idx % out_features;
+    const int n = idx / out_features;
+
+    float sum = use_bias ? bias[of] : 0.0f;
+
+    for (int inf = 0; inf < in_features; ++inf) {
+        sum += input[n * in_features + inf] * weight[of * in_features + inf];
+    }
+
+    output[n * out_features + of] = sum;
+}
+
+CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size) const {
+    if (block_size <= 0) {
+        throw std::invalid_argument("Linear::forward_cuda: block_size must be positive.");
+    }
+    if (input.F != cfg.in_features) {
+        throw std::invalid_argument("Linear::forward_cuda: input feature size mismatch.");
+    }
+
+    CudaMatrix output(nullptr, input.N, cfg.out_features, true);
+    float* d_weight = nullptr;
+    float* d_bias = nullptr;
+
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), sizeof(float) * output.size()));
+
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.size()));
+    CUDA_CHECK(cudaMemcpy(
+        d_weight,
+        weight.data(),
+        sizeof(float) * weight.size(),
+        cudaMemcpyHostToDevice
+    ));
+
+    if (cfg.use_bias) {
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
+        CUDA_CHECK(cudaMemcpy(
+            d_bias,
+            bias.data(),
+            sizeof(float) * bias.size(),
+            cudaMemcpyHostToDevice
+        ));
+    }
+
+    dim3 blockSize(block_size);
+    dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+
+    linear_kernel<<<gridSize, blockSize>>>(
+        input.data,
+        d_weight,
+        d_bias,
+        output.data,
+        input.N,
+        input.F,
+        cfg.out_features,
+        cfg.use_bias
+    );
+    CUDA_CHECK_KERNEL();
+
+    CUDA_CHECK(cudaFree(d_weight));
+    if (d_bias != nullptr) {
+        CUDA_CHECK(cudaFree(d_bias));
+    }
+
+    return output;
 }

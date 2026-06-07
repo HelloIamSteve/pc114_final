@@ -1,4 +1,6 @@
 #include "conv.h"
+#include "cuda_help.h"
+
 #include <stdexcept>
 
 // =========================
@@ -129,4 +131,136 @@ Tensor4D Conv2D::forward(const Tensor4D& input) const {
 
 Tensor4D Conv2D::forward(const Tensor4DView& input) const {
     return conv2d_forward_impl(*this, input);
+}
+
+// for CUDA
+__global__ void conv2d_kernel(
+    const float* input,
+    const float* weight,
+    const float* bias,
+    float* output,
+    int N,
+    int C_in,
+    int H,
+    int W,
+    int C_out,
+    int kernel_h,
+    int kernel_w,
+    int stride_h,
+    int stride_w,
+    int pad_h,
+    int pad_w,
+    int out_h,
+    int out_w,
+    bool use_bias
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int outputSize = N * C_out * out_h * out_w;
+
+    if (idx >= outputSize) {
+        return;
+    }
+
+    // output[idx]
+    // = output[n][oc][oh][ow]
+    // = output[ow + oh * out_w + oc * out_h * out_w + n * C_out * out_h * out_w]
+    // = output[((n * C_out + oc) * out_h + oh) * out_w + ow]
+
+    const int ow = idx % out_w;
+    const int oh = (idx / out_w) % out_h;
+    const int oc = (idx / (out_h * out_w)) % C_out;
+    const int n = idx / (C_out * out_h * out_w);
+
+    float sum = use_bias ? bias[oc] : 0.0f;
+
+    for (int ic = 0; ic < C_in; ++ic) {
+        for (int kh = 0; kh < kernel_h; ++kh) {
+            for (int kw = 0; kw < kernel_w; ++kw) {
+                const int ih = oh * stride_h - pad_h + kh;
+                const int iw = ow * stride_w - pad_w + kw;
+
+                if (ih >= 0 && ih < H && iw >= 0 && iw < W) {   // index valid
+                    const int input_idx = ((n * C_in + ic) * H + ih) * W + iw;
+                    const int weight_idx = ((oc * C_in + ic) * kernel_h + kh) * kernel_w + kw;
+                    sum += input[input_idx] * weight[weight_idx];
+                }
+            }
+        }
+    }
+
+    output[((n * C_out + oc) * out_h + oh) * out_w + ow] = sum;
+}
+
+CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input, int block_size) const {
+    if (block_size <= 0) {
+        throw std::invalid_argument("Conv2D::forward_cuda: block_size must be positive.");
+    }
+    if (input.C != cfg.in_channels) {
+        throw std::invalid_argument("Conv2D::forward_cuda: input channel mismatch.");
+    }
+
+    const int out_h = (input.H + 2 * cfg.pad_h - cfg.kernel_h) / cfg.stride_h + 1;
+    const int out_w = (input.W + 2 * cfg.pad_w - cfg.kernel_w) / cfg.stride_w + 1;
+
+    if (out_h <= 0 || out_w <= 0) {
+        throw std::invalid_argument("Conv2D::forward_cuda: invalid output shape.");
+    }
+
+    CudaTensor4D output(nullptr, input.N, cfg.out_channels, out_h, out_w, true);
+    float* d_weight = nullptr;
+    float* d_bias = nullptr;
+
+    // allocate on device
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data),sizeof(float) * output.size()));
+
+    // allocate & copy to device
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.data.size()));
+    CUDA_CHECK(cudaMemcpy(d_weight,weight.data.data(),
+        sizeof(float) * weight.data.size(),
+        cudaMemcpyHostToDevice
+    ));
+
+    if (cfg.use_bias) {
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
+        CUDA_CHECK(cudaMemcpy(
+            d_bias,
+            bias.data(),
+            sizeof(float) * bias.size(),
+            cudaMemcpyHostToDevice
+        ));
+    }
+
+    // const int grid_size = (output.size() + block_size - 1) / block_size;
+    dim3 blockSize(block_size);
+    dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+
+    conv2d_kernel<<<gridSize, blockSize>>>(
+        input.data,
+        d_weight,
+        d_bias,
+        output.data,
+        input.N,
+        input.C,
+        input.H,
+        input.W,
+        cfg.out_channels,
+        cfg.kernel_h,
+        cfg.kernel_w,
+        cfg.stride_h,
+        cfg.stride_w,
+        cfg.pad_h,
+        cfg.pad_w,
+        out_h,
+        out_w,
+        cfg.use_bias
+    );
+
+    CUDA_CHECK_KERNEL();
+
+    CUDA_CHECK(cudaFree(d_weight));
+    if (d_bias != nullptr) {
+        CUDA_CHECK(cudaFree(d_bias));
+    }
+
+    return output;
 }

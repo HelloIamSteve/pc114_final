@@ -1,4 +1,6 @@
 #include "model.h"
+#include "tensor.h"
+#include "cuda_help.h"
 
 #include <string>
 #include <vector>
@@ -6,6 +8,8 @@
 #include <pthread.h>
 #include <omp.h>
 
+/* CPU */
+/* single image */
 std::vector<float> LeNet::forward(const Tensor4D& input) const{
     Tensor4D y = conv1.forward(input);
     relu_inplace(y);
@@ -24,6 +28,7 @@ std::vector<float> LeNet::forward(const Tensor4D& input) const{
     return out;
 }
 
+/* batch inference */
 std::vector<std::vector<float>> LeNet::forward_batch(const Tensor4D& input) const {
     Tensor4D y = conv1.forward(input);
     relu_inplace(y);
@@ -49,6 +54,7 @@ std::vector<std::vector<float>> LeNet::forward_batch(const Tensor4D& input) cons
     return batch_logits;
 }
 
+/* pthread version */
 void LeNet::forward_batch(const Tensor4DView& input, std::vector<std::vector<float>>& output, int output_offset) const {
     Tensor4D y = conv1.forward(input);
     relu_inplace(y);
@@ -137,6 +143,8 @@ std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& inp
     return output;
 }
 
+/* openmp version */
+
 std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& input, int thread_num) const {
     if (thread_num <= 0) {
         throw std::invalid_argument("thread_num must be positive.");
@@ -167,4 +175,47 @@ std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& inpu
 
     return output;
 
+}
+
+/* CUDA version */
+std::vector<std::vector<float>> LeNet::forward_batch_cuda(const Tensor4D& input, int block_size) const{
+    if (block_size <= 0) {
+        throw std::invalid_argument("block_size must be positive.");
+    }
+
+    if (input.N <= 0 || input.C <= 0 || input.H <= 0 || input.W <= 0) {
+        throw std::invalid_argument("forward_batch_cuda: input tensor has invalid shape.");
+    }
+
+    CudaTensor4D d_input = tensor4d_to_device(input);
+
+    CudaTensor4D d_y = conv1.forward_cuda(d_input, block_size);
+    relu_cuda(d_y, block_size);
+    d_y = pool1.forward_cuda(d_y, block_size);
+
+    d_y = conv2.forward_cuda(d_y, block_size);
+    relu_cuda(d_y, block_size);
+    d_y = pool2.forward_cuda(d_y, block_size);
+
+    // flatten
+    CudaMatrix d_flattened(d_y.data, d_y.N, d_y.C * d_y.H * d_y.W, false);
+    
+    // fully-connection layers
+    d_flattened = fc1.forward_cuda(d_flattened, block_size);
+    d_flattened = fc2.forward_cuda(d_flattened, block_size);
+    d_flattened = fc3.forward_cuda(d_flattened, block_size);
+
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<float> host_logits = cuda_matrix_to_host(d_flattened);
+
+    std::vector<std::vector<float>> output(input.N, std::vector<float>(fc3.cfg.out_features, 0.0f));
+
+    for(int i=0; i<input.N; i++){
+        for(int j=0; j<fc3.cfg.out_features; j++){
+            output[i][j] = host_logits[i * fc3.cfg.out_features + j];
+        }
+    }
+
+    return output;
 }

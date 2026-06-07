@@ -1,8 +1,12 @@
-#include "tensor.h"
 #include <stdexcept>
-#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #include <fstream>
 #include <sstream>
+
+#include "tensor.h"
+#include "cuda_help.h"
 
 namespace {
 std::string join_path(const std::string& dir, const std::string& file) {
@@ -164,4 +168,153 @@ TestingSet load_testing_set_as_tensor(
     }
 
     return dataset;
+}
+
+// for cuda
+CudaTensor4D::~CudaTensor4D() {
+    release();
+}
+
+CudaTensor4D::CudaTensor4D(CudaTensor4D&& other) noexcept
+    : data(other.data),
+      N(other.N),
+      C(other.C),
+      H(other.H),
+      W(other.W),
+      owns_data(other.owns_data) {
+    other.data = nullptr;
+    other.N = 0;
+    other.C = 0;
+    other.H = 0;
+    other.W = 0;
+    other.owns_data = true;
+}
+
+CudaTensor4D& CudaTensor4D::operator=(CudaTensor4D&& other) noexcept {
+    if (this != &other) {
+        release();
+
+        data = other.data;
+        N = other.N;
+        C = other.C;
+        H = other.H;
+        W = other.W;
+        owns_data = other.owns_data;
+
+        other.data = nullptr;
+        other.N = 0;
+        other.C = 0;
+        other.H = 0;
+        other.W = 0;
+        other.owns_data = true;
+    }
+
+    return *this;
+}
+
+void CudaTensor4D::release() noexcept {
+    if (owns_data && data != nullptr) {
+        cudaError_t err = cudaFree(data);
+
+        if (err != cudaSuccess) {
+            std::fprintf(
+                stderr,
+                "CUDA warning: cudaFree failed in destructor/release: %s\n",
+                cudaGetErrorString(err)
+            );
+        }
+    }
+
+    data = nullptr;
+    N = 0;
+    C = 0;
+    H = 0;
+    W = 0;
+    owns_data = true;
+}
+
+CudaMatrix::~CudaMatrix() {
+    release();
+}
+
+CudaMatrix::CudaMatrix(CudaMatrix&& other) noexcept
+    : data(other.data),
+      N(other.N),
+      F(other.F),
+      owns_data(other.owns_data) {
+    other.data = nullptr;
+    other.N = 0;
+    other.F = 0;
+    other.owns_data = true;
+}
+
+CudaMatrix& CudaMatrix::operator=(CudaMatrix&& other) noexcept {
+    if (this != &other) {
+        release();
+
+        data = other.data;
+        N = other.N;
+        F = other.F;
+        owns_data = other.owns_data;
+
+        other.data = nullptr;
+        other.N = 0;
+        other.F = 0;
+        other.owns_data = true;
+    }
+
+    return *this;
+}
+
+void CudaMatrix::release() noexcept {
+    if (owns_data && data != nullptr) {
+        cudaError_t err = cudaFree(data);
+
+        if (err != cudaSuccess) {
+            std::fprintf(
+                stderr,
+                "CUDA warning: cudaFree failed in destructor/release: %s\n",
+                cudaGetErrorString(err)
+            );
+        }
+    }
+
+    data = nullptr;
+    N = 0;
+    F = 0;
+    owns_data = true;
+}
+
+CudaTensor4D tensor4d_to_device(const Tensor4D& input) {
+    if (input.N <= 0 || input.C <= 0 || input.H <= 0 || input.W <= 0) {
+        throw std::invalid_argument("upload_tensor4d_cuda: input tensor has invalid shape.");
+    }
+
+    CudaTensor4D output(nullptr, input.N, input.C, input.H, input.W, true);
+
+    CUDA_CHECK(cudaMalloc(&output.data, sizeof(float) * input.data.size()));
+    CUDA_CHECK(cudaMemcpy(
+        output.data,
+        input.data.data(),
+        sizeof(float) * input.data.size(),
+        cudaMemcpyHostToDevice
+    ));
+
+    return output;
+}
+
+std::vector<float> cuda_matrix_to_host(const CudaMatrix& matrix) {
+    if (matrix.data == nullptr || matrix.N <= 0 || matrix.F <= 0) {
+        throw std::invalid_argument("download_cuda_matrix: matrix has invalid shape or null data.");
+    }
+
+    std::vector<float> host(matrix.size(), 0.0f);
+    CUDA_CHECK(cudaMemcpy(
+        host.data(),
+        matrix.data,
+        host.size() * sizeof(float),
+        cudaMemcpyDeviceToHost
+    ));
+
+    return host;
 }

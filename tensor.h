@@ -58,4 +58,56 @@ TestingSet load_testing_set_as_tensor(
     bool normalize = true
 );
 
+// for cuda
+struct CudaTensor4D {
+    float* data;
+    int N, C, H, W;
+    bool owns_data;
+
+    CudaTensor4D() : data(nullptr), N(0), C(0), H(0), W(0), owns_data(true){}
+    CudaTensor4D(float* ptr, int n, int c, int h, int w, bool owns)
+        : data(ptr), N(n), C(c), H(h), W(w), owns_data(owns) {}
+
+    ~CudaTensor4D();
+
+    CudaTensor4D(const CudaTensor4D&) = delete;
+    CudaTensor4D& operator=(const CudaTensor4D&) = delete;
+
+    CudaTensor4D(CudaTensor4D&& other) noexcept;
+    CudaTensor4D& operator=(CudaTensor4D&& other) noexcept;
+
+    int size() const {
+        return N * C * H * W;
+    }
+
+    void release() noexcept;
+};
+
+struct CudaMatrix {
+    float* data;
+    int N, F;
+    bool owns_data;
+    
+    CudaMatrix() : data(nullptr), N(0), F(0), owns_data(true){}
+    CudaMatrix(float* ptr, int n, int f, bool owns)
+    : data(ptr), N(n), F(f), owns_data(owns) {}
+    
+    ~CudaMatrix();
+    
+    CudaMatrix(const CudaMatrix&) = delete;
+    CudaMatrix& operator=(const CudaMatrix&) = delete;
+    
+    CudaMatrix(CudaMatrix&& other) noexcept;
+    CudaMatrix& operator=(CudaMatrix&& other) noexcept;
+    
+    int size() const {
+        return N * F;
+    }
+
+    void release() noexcept;
+};
+
+CudaTensor4D tensor4d_to_device(const Tensor4D& input);
+std::vector<float> cuda_matrix_to_host(const CudaMatrix& matrix);
+
 #endif

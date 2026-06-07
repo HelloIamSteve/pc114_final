@@ -107,5 +107,27 @@ int main(int argc, char* argv[]){
     std::cout << "Accuracy: " << acc << "%" << '\n';
     std::cout << "---------------" << '\n';
 
+    /* CUDA version */
+    std::cout << "CUDA version:" << '\n';
+
+    // start time
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // start time
+    cudaEventRecord(start);
+    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(test_set.images, THREAD_NUM);
+
+    // end time
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    float elapsedTime_cuda;
+    cudaEventElapsedTime(&elapsedTime_cuda, start, stop);
+    std::cout << "Inference time: " << elapsedTime_cuda << " ms" << '\n';
+    acc = getAccuracy(logits_cuda, test_set.labels);
+    std::cout << "Accuracy: " << acc << "%" << '\n';
+
     return 0;
 }

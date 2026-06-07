@@ -11,8 +11,14 @@
 // Applies: output = max(0, input)
 // Used after conv1 and conv2 in your PyTorch LeNet.
 // ============================================================
+
+// for CPU
 Tensor4D relu(const Tensor4D& input);
 void relu_inplace(Tensor4D& input);
+
+// for CUDA
+void relu_cuda(CudaTensor4D& input, int block_size);
+void relu_cuda(CudaMatrix& input, int block_size);
 
 // Optional vector version, useful if you later add ReLU after FC layers.
 std::vector<float> relu_vector(const std::vector<float>& input);
@@ -46,7 +52,11 @@ public:
 
     AvgPool2D(const AvgPool2DConfig& config);
 
+    // for CPU
     Tensor4D forward(const Tensor4D& input) const;
+
+    // for CUDA
+    CudaTensor4D forward_cuda(const CudaTensor4D& input, int block_size) const;
 
 private:
     int output_height(int input_h) const;
@@ -103,7 +113,11 @@ public:
     void set_weight(const std::vector<float>& w);
     void set_bias(const std::vector<float>& b);
 
+    // for CPU
     std::vector<float> forward(const std::vector<float>& input) const;
+
+    // for CUDA
+    CudaMatrix forward_cuda(const CudaMatrix& input, int block_size) const;
 
     int getWeightSize() const {
         return cfg.out_features * cfg.in_features;
