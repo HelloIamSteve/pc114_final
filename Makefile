@@ -11,6 +11,7 @@
 # ============================================================
 
 CXX = g++
+NVCC = nvcc
 
 # OpenCV flags for image loading in tensor.cpp.
 # Requires OpenCV installed with pkg-config support, usually opencv4.
@@ -20,21 +21,29 @@ OPENCV_LIBS := $(shell pkg-config --libs opencv4 2>/dev/null)
 THREAD_FLAGS = -pthread
 OPENMP_FLAGS = -fopenmp
 
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 $(OPENCV_CFLAGS) $(THREAD_FLAGS) $(OPENMP_FLAGS)
-LDLIBS = $(OPENCV_LIBS) $(THREAD_FLAGS) $(OPENMP_FLAGS)
+CXXFLAGS = -std=c++17 -Wall -Wextra $(OPENCV_CFLAGS) $(THREAD_FLAGS) $(OPENMP_FLAGS)
+NVCCFLAGS = -std=c++17 $(OPENCV_CFLAGS) \
+            -Xcompiler "-Wall -Wextra $(THREAD_FLAGS) $(OPENMP_FLAGS)"
+
+LINKFLAGS = $(OPENCV_LIBS) -Xcompiler "$(THREAD_FLAGS) $(OPENMP_FLAGS)"
 
 TARGET = main
-MAIN_SRC = main.cpp
+MAIN_SRC = main.cu
 
-CORE_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp model.cpp
-CORE_OBJS = $(CORE_SRCS:.cpp=.o)
+CPP_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp
+CPP_OBJS = $(CPP_SRCS:.cpp=.o)
 
-MAIN_OBJ = $(MAIN_SRC:.cpp=.o)
-SRCS = $(CORE_SRCS) $(MAIN_SRC)
-OBJS = $(CORE_OBJS) $(MAIN_OBJ)
+CU_SRCS = model.cu
+CU_OBJS = $(CU_SRCS:.cu=.o)
 
-# If main.cpp exists, build the executable.
-# If main.cpp does not exist yet, only compile the core files.
+CORE_OBJS = $(CPP_OBJS) $(CU_OBJS)
+
+MAIN_OBJ = $(MAIN_SRC:.cu=.o)
+SRCS = $(CPP_SRCS) $(CU_SRCS) $(MAIN_SRC)
+OBJS = $(CPP_OBJS) $(CU_OBJS) $(MAIN_OBJ)
+
+# If main.cu exists, build the executable.
+# If main.cu does not exist yet, only compile the core files.
 ifneq ($(wildcard $(MAIN_SRC)),)
 all: $(TARGET)
 else
@@ -45,34 +54,28 @@ core: $(CORE_OBJS)
 	@echo "Core objects built successfully. Add main.cpp to build $(TARGET)."
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS)
+	$(NVCC) -o $@ $^ $(NVCCFLAGS) $(LINKFLAGS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 # Header dependencies.
 tensor.o: tensor.cpp tensor.h
 conv.o: conv.cpp conv.h tensor.h
 layers.o: layers.cpp layers.h tensor.h
 weight_loader.o: weight_loader.cpp weight_loader.h conv.h layers.h tensor.h
-model.o: model.cpp model.h conv.h layers.h tensor.h weight_loader.h
-main.o: main.cpp model.h conv.h layers.h tensor.h weight_loader.h
+model.o: model.cu model.h conv.h layers.h tensor.h weight_loader.h
+main.o: main.cu model.h conv.h layers.h tensor.h weight_loader.h
 
 run: $(TARGET)
 	./$(TARGET)
 
-debug: CXXFLAGS = -std=c++17 -Wall -Wextra -g -O0 $(OPENCV_CFLAGS)
+debug: CXXFLAGS = -std=c++17 -Wall -Wextra -g -O0 $(OPENCV_CFLAGS) $(THREAD_FLAGS) $(OPENMP_FLAGS)
+debug: NVCCFLAGS = -std=c++17 -g -G $(OPENCV_CFLAGS) -Xcompiler "-Wall -Wextra -g -O0 $(THREAD_FLAGS) $(OPENMP_FLAGS)"
 debug: clean all
-
-# Placeholder targets for future acceleration versions.
-openmp:
-	@echo "OpenMP target will be added after the serial version is correct."
-
-pthread:
-	@echo "Pthread target will be added after the serial version is correct."
-
-cuda:
-	@echo "CUDA target will be added after the serial version is correct."
 
 clean:
 	rm -f $(OBJS) $(TARGET)
