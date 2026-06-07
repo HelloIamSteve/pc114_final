@@ -55,27 +55,27 @@ std::vector<std::vector<float>> LeNet::forward_batch(const Tensor4D& input) cons
     return batch_logits;
 }
 
-/* pthread version */
-void LeNet::forward_batch(const Tensor4DView& input, std::vector<std::vector<float>>& output, int output_offset) const {
+void LeNet::forward_batch(const Tensor4DView& input, std::vector<std::vector<float>>& output, int output_offset, bool openmp) const {
     Tensor4D y = conv1.forward(input);
-    relu_inplace(y);
+    relu_inplace(y, openmp);
     y = pool1.forward(y);
-
+    
     y = conv2.forward(y);
-    relu_inplace(y);
+    relu_inplace(y, openmp);
     y = pool2.forward(y);
     
     for (int n = 0; n < y.N; ++n) {
         std::vector<float> flattened = flatten(y, n);
-
+        
         std::vector<float> out = fc1.forward(flattened);
         out = fc2.forward(out);
         out = fc3.forward(out);
-
+        
         output[output_offset + n] = out;
     }
 }
 
+/* pthread version */
 void* threadRunner(void* arg) {
     pthreadArg* args = static_cast<pthreadArg*>(arg);
 
@@ -138,34 +138,19 @@ std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& inp
 }
 
 /* openmp version */
-
 std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& input, int thread_num) const {
-    if (thread_num <= 0) {
-        throw std::invalid_argument("thread_num must be positive.");
-    }
-
     int n = input.N;
-
-    if (thread_num > n) {
-        thread_num = n;
-    }
-
     std::vector<std::vector<float>> output(n);
-    int chunkSize = (n + thread_num - 1) / thread_num;
 
-    #pragma omp parallel for num_threads(thread_num) schedule(static)
-    for (int tid = 0; tid < thread_num; ++tid) {
-        const int start = tid * chunkSize;
-        const int end = std::min(n, start + chunkSize);
+    // allocate task to each cores
+    int mini_batch_size = 32; 
 
-        if (start >= end) {
-            continue;
-        }
-
+    #pragma omp parallel for num_threads(thread_num) schedule(dynamic)
+    for (int start = 0; start < n; start += mini_batch_size) {
+        int end = std::min(n, start + mini_batch_size);
         Tensor4DView input_view(input, start, end);
-
-        // output[start:end] = forward_batch(input[start:end])
-        forward_batch(input_view, output, start);
+        
+        forward_batch(input_view, output, start, true);
     }
 
     return output;

@@ -38,7 +38,7 @@ class LeNet {
 
         // pthread version
         std::vector<std::vector<float>> forward_batch_pthread(const Tensor4D&, int) const;
-        void forward_batch(const Tensor4DView&, std::vector<std::vector<float>>&, int) const;
+        void forward_batch(const Tensor4DView&, std::vector<std::vector<float>>&, int, bool = false) const;
 
         // OpenMP version
         std::vector<std::vector<float>> forward_batch_openmp(const Tensor4D&, int) const;

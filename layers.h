@@ -14,7 +14,7 @@
 
 // for CPU
 Tensor4D relu(const Tensor4D& input);
-void relu_inplace(Tensor4D& input);
+void relu_inplace(Tensor4D& input, bool openmp = false);
 
 // for CUDA
 void relu_cuda(CudaTensor4D& input, int block_size, float* compute_time_ms = nullptr);

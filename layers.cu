@@ -21,10 +21,18 @@ Tensor4D relu(const Tensor4D& input) {
     return output;
 }
 
-void relu_inplace(Tensor4D& input) {
-    for (int i = 0; i < static_cast<int>(input.data.size()); ++i) {
-        if (input.data[i] < 0.0f) {
-            input.data[i] = 0.0f;
+void relu_inplace(Tensor4D& input, bool openmp) {
+    float* ptr = input.data.data();
+    int size = static_cast<int>(input.data.size());
+
+    if (openmp) {
+        #pragma omp simd
+        for (int i = 0; i < size; ++i) {
+            ptr[i] = ptr[i] > 0.0f ? ptr[i] : 0.0f;
+        }
+    }else{
+        for (int i = 0; i < size; ++i) {
+            ptr[i] = ptr[i] > 0.0f ? ptr[i] : 0.0f;
         }
     }
 }

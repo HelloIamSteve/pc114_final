@@ -34,16 +34,16 @@ Tensor4D::Tensor4D(int n, int c, int h, int w)
 }
 
 float& Tensor4D::at(int n, int c, int h, int w) {
-    if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
-        throw std::out_of_range("Tensor4D::at index out of range.");
-    }
+    // if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
+    //     throw std::out_of_range("Tensor4D::at index out of range.");
+    // }
     return data[((n * C + c) * H + h) * W + w];
 }
 
 const float& Tensor4D::at(int n, int c, int h, int w) const {
-    if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
-        throw std::out_of_range("Tensor4D::at index out of range.");
-    }
+    // if (n < 0 || n >= N || c < 0 || c >= C || h < 0 || h >= H || w < 0 || w >= W) {
+    //     throw std::out_of_range("Tensor4D::at index out of range.");
+    // }
     return data[((n * C + c) * H + h) * W + w];
 }
 
