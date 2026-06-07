@@ -42,6 +42,9 @@ public:
 
     // OpenMP version
     std::vector<std::vector<float>> forward_batch_openmp(const Tensor4D&, int) const;
+
+    // CUDA version
+    std::vector<std::vector<float>> forward_batch_cuda(const Tensor4D&, int) const;
 };
 
 typedef struct _pthreadArg{
