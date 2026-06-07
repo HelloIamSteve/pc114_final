@@ -194,7 +194,8 @@ __global__ void conv2d_kernel(
 CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input,
     int block_size,
     float* compute_time_ms,
-    float* transfer_time_ms
+    float* transfer_time_ms,
+    float* malloc_time_ms
 ) const {
     if (block_size <= 0) {
         throw std::invalid_argument("Conv2D::forward_cuda: block_size must be positive.");
@@ -215,10 +216,12 @@ CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input,
     float* d_bias = nullptr;
 
     // allocate on device
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data),sizeof(float) * output.size()));
+    // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data),sizeof(float) * output.size()));
+    CUDA_MALLOC_TIMED((void**)&output.data, sizeof(float) * output.size(), malloc_time_ms);
 
     // allocate & copy to device
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.data.size()));
+    // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.data.size()));
+    CUDA_MALLOC_TIMED((void**)&d_weight, sizeof(float) * weight.data.size(), malloc_time_ms);
     CUDA_MEMCPY_TIMED(
         d_weight,
         weight.data.data(),
@@ -228,7 +231,8 @@ CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input,
     );
 
     if (cfg.use_bias) {
-        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
+        // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
+        CUDA_MALLOC_TIMED((void**)&d_bias, sizeof(float) * bias.size(), malloc_time_ms);
         CUDA_MEMCPY_TIMED(
             d_bias,
             bias.data(),

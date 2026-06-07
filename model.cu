@@ -207,15 +207,15 @@ const{
         *cuda_malloc_time_ms = 0.0f;
     }
 
-    CudaTensor4D d_input = Tensor4D_to_device(input, cuda_transfer_time_ms);
+    CudaTensor4D d_input = Tensor4D_to_device(input, cuda_transfer_time_ms, cuda_malloc_time_ms);
 
-    CudaTensor4D d_y = conv1.forward_cuda(d_input, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    CudaTensor4D d_y = conv1.forward_cuda(d_input, block_size, cuda_compute_time_ms, cuda_transfer_time_ms, cuda_malloc_time_ms);
     relu_cuda(d_y, block_size, cuda_compute_time_ms);
-    d_y = pool1.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    d_y = pool1.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_malloc_time_ms);
 
-    d_y = conv2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    d_y = conv2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms, cuda_malloc_time_ms);
     relu_cuda(d_y, block_size, cuda_compute_time_ms);
-    d_y = pool2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    d_y = pool2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_malloc_time_ms);
 
     // flatten
     CudaMatrix d_flattened(d_y.data, d_y.N, d_y.C * d_y.H * d_y.W, false);
