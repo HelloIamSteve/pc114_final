@@ -30,10 +30,10 @@ LINKFLAGS = $(OPENCV_LIBS) -Xcompiler "$(THREAD_FLAGS) $(OPENMP_FLAGS)"
 TARGET = main
 MAIN_SRC = main.cu
 
-CPP_SRCS = tensor.cpp conv.cpp layers.cpp weight_loader.cpp
-CPP_OBJS = $(CPP_SRCS:.cpp=.o)
+# CPP_SRCS = weight_loader.cpp
+# CPP_OBJS = $(CPP_SRCS:.cpp=.o)
 
-CU_SRCS = model.cu
+CU_SRCS = tensor.cu conv.cu layers.cu model.cu weight_loader.cu
 CU_OBJS = $(CU_SRCS:.cu=.o)
 
 CORE_OBJS = $(CPP_OBJS) $(CU_OBJS)
@@ -63,10 +63,10 @@ $(TARGET): $(OBJS)
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
 # Header dependencies.
-tensor.o: tensor.cpp tensor.h
-conv.o: conv.cpp conv.h tensor.h
-layers.o: layers.cpp layers.h tensor.h
-weight_loader.o: weight_loader.cpp weight_loader.h conv.h layers.h tensor.h
+tensor.o: tensor.cu tensor.h
+conv.o: conv.cu conv.h tensor.h
+layers.o: layers.cu layers.h tensor.h
+weight_loader.o: weight_loader.cu weight_loader.h conv.h layers.h tensor.h
 model.o: model.cu model.h conv.h layers.h tensor.h weight_loader.h
 main.o: main.cu model.h conv.h layers.h tensor.h weight_loader.h
 
