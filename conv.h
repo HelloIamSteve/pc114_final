@@ -46,7 +46,7 @@ public:
     Tensor4D forward(const Tensor4DView& input) const;  // overload for batch processing
 
     // for CUDA
-    CudaTensor4D forward_cuda(const CudaTensor4D& input, int block_size) const;
+    CudaTensor4D forward_cuda(const CudaTensor4D&, int, float* = nullptr, float* = nullptr) const;
 
     int getWeightSize() const {
         return weight.N * weight.C * weight.H * weight.W;

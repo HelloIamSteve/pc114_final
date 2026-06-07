@@ -107,7 +107,7 @@ struct CudaMatrix {
     void release() noexcept;
 };
 
-CudaTensor4D tensor4d_to_device(const Tensor4D& input);
-std::vector<float> cuda_matrix_to_host(const CudaMatrix& matrix);
+CudaTensor4D Tensor4D_to_device(const Tensor4D&, float* = nullptr, float* = nullptr);
+std::vector<float> cuda_matrix_to_host(const CudaMatrix&, float* = nullptr);
 
 #endif

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <cuda_runtime.h>
 
 // ============================================================
 // ReLU Layer
@@ -58,7 +59,7 @@ __global__ void relu_kernel(float* data, int size) {
     }
 }
 
-void relu_cuda(CudaTensor4D& input, int block_size) {
+void relu_cuda(CudaTensor4D& input, int block_size, float* compute_time_ms) {
     if (block_size <= 0) {
         throw std::invalid_argument("relu_cuda: block_size must be positive.");
     }
@@ -66,11 +67,25 @@ void relu_cuda(CudaTensor4D& input, int block_size) {
     dim3 blockSize(block_size);
     dim3 gridSize((input.size() + blockSize.x - 1) / blockSize.x);
 
+    cudaEvent_t start, stop;
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        CUDA_CHECK(cudaEventRecord(start));
+    }
+
     relu_kernel<<<gridSize, blockSize>>>(input.data, input.size());
     CUDA_CHECK_KERNEL();
+
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventRecord(stop));
+        CUDA_ADD_ELAPSED_TIME(start, stop, compute_time_ms);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+    }
 }
 
-void relu_cuda(CudaMatrix& input, int block_size) {
+void relu_cuda(CudaMatrix& input, int block_size, float* compute_time_ms) {
     if (block_size <= 0) {
         throw std::invalid_argument("relu_cuda: block_size must be positive.");
     }
@@ -78,8 +93,22 @@ void relu_cuda(CudaMatrix& input, int block_size) {
     dim3 blockSize(block_size);
     dim3 gridSize((input.size() + blockSize.x - 1) / blockSize.x);
 
+    cudaEvent_t start, stop;
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        CUDA_CHECK(cudaEventRecord(start));
+    }
+
     relu_kernel<<<gridSize, blockSize>>>(input.data, input.size());
     CUDA_CHECK_KERNEL();
+
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventRecord(stop));
+        CUDA_ADD_ELAPSED_TIME(start, stop, compute_time_ms);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+    }
 }
 
 // ============================================================
@@ -198,7 +227,7 @@ __global__ void avgpool2d_kernel(
         sum / static_cast<float>(kernel_h * kernel_w);
 }
 
-CudaTensor4D AvgPool2D::forward_cuda(const CudaTensor4D& input, int block_size) const {
+CudaTensor4D AvgPool2D::forward_cuda(const CudaTensor4D& input, int block_size, float* compute_time_ms, float* malloc_time_ms) const {
     if (block_size <= 0) {
         throw std::invalid_argument("AvgPool2D::forward_cuda: block_size must be positive.");
     }
@@ -211,10 +240,18 @@ CudaTensor4D AvgPool2D::forward_cuda(const CudaTensor4D& input, int block_size) 
     }
 
     CudaTensor4D output(nullptr, input.N, input.C, out_h, out_w, true);
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), output.size() * sizeof(float)));
+    // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), output.size() * sizeof(float)));
+    CUDA_MALLOC_TIMED((void**)&output.data, output.size() * sizeof(float), malloc_time_ms);
 
     dim3 blockSize(block_size);
     dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+    
+    cudaEvent_t start, stop;
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        CUDA_CHECK(cudaEventRecord(start));
+    }
 
     avgpool2d_kernel<<<gridSize, blockSize>>>(
         input.data,
@@ -232,6 +269,13 @@ CudaTensor4D AvgPool2D::forward_cuda(const CudaTensor4D& input, int block_size) 
     );
 
     CUDA_CHECK_KERNEL();
+
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventRecord(stop));
+        CUDA_ADD_ELAPSED_TIME(start, stop, compute_time_ms);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+    }
 
     return output;
 }
@@ -335,28 +379,6 @@ std::vector<float> Linear::forward(const std::vector<float>& input) const {
 }
 
 // ============================================================
-// Utility
-// ============================================================
-
-int argmax(const std::vector<float>& input) {
-    if (input.empty()) {
-        throw std::invalid_argument("argmax: input vector is empty.");
-    }
-
-    int best_index = 0;
-    float best_value = input[0];
-
-    for (int i = 1; i < static_cast<int>(input.size()); ++i) {
-        if (input[i] > best_value) {
-            best_value = input[i];
-            best_index = i;
-        }
-    }
-
-    return best_index;
-}
-
-// ============================================================
 // Linear CUDA version
 // ============================================================
 
@@ -389,7 +411,7 @@ __global__ void linear_kernel(
     output[n * out_features + of] = sum;
 }
 
-CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size) const {
+CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size, float* compute_time_ms, float* transfer_time_ms, float* malloc_time_ms) const {
     if (block_size <= 0) {
         throw std::invalid_argument("Linear::forward_cuda: block_size must be positive.");
     }
@@ -401,28 +423,41 @@ CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size) const {
     float* d_weight = nullptr;
     float* d_bias = nullptr;
 
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), sizeof(float) * output.size()));
+    // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&output.data), sizeof(float) * output.size()));
+    CUDA_MALLOC_TIMED((void**)&output.data, sizeof(float) * output.size(), malloc_time_ms);
 
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.size()));
-    CUDA_CHECK(cudaMemcpy(
+    // allocate & copy to device
+    // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.size()));
+    CUDA_MALLOC_TIMED((void**)&d_weight, sizeof(float) * weight.size(), malloc_time_ms);
+    CUDA_MEMCPY_TIMED(
         d_weight,
         weight.data(),
         sizeof(float) * weight.size(),
-        cudaMemcpyHostToDevice
-    ));
+        cudaMemcpyHostToDevice,
+        transfer_time_ms
+    );
 
     if (cfg.use_bias) {
-        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
-        CUDA_CHECK(cudaMemcpy(
+        // CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
+        CUDA_MALLOC_TIMED((void**)&d_bias, sizeof(float) * bias.size(), malloc_time_ms);
+        CUDA_MEMCPY_TIMED(
             d_bias,
             bias.data(),
             sizeof(float) * bias.size(),
-            cudaMemcpyHostToDevice
-        ));
+            cudaMemcpyHostToDevice,
+            transfer_time_ms
+        );
     }
 
     dim3 blockSize(block_size);
     dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+
+    cudaEvent_t start, stop;
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        CUDA_CHECK(cudaEventRecord(start));
+    }
 
     linear_kernel<<<gridSize, blockSize>>>(
         input.data,
@@ -434,7 +469,15 @@ CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size) const {
         cfg.out_features,
         cfg.use_bias
     );
+
     CUDA_CHECK_KERNEL();
+
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventRecord(stop));
+        CUDA_ADD_ELAPSED_TIME(start, stop, compute_time_ms);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+    }
 
     CUDA_CHECK(cudaFree(d_weight));
     if (d_bias != nullptr) {
@@ -442,4 +485,26 @@ CudaMatrix Linear::forward_cuda(const CudaMatrix& input, int block_size) const {
     }
 
     return output;
+}
+
+// ============================================================
+// Utility
+// ============================================================
+
+int argmax(const std::vector<float>& input) {
+    if (input.empty()) {
+        throw std::invalid_argument("argmax: input vector is empty.");
+    }
+
+    int best_index = 0;
+    float best_value = input[0];
+
+    for (int i = 1; i < static_cast<int>(input.size()); ++i) {
+        if (input[i] > best_value) {
+            best_value = input[i];
+            best_index = i;
+        }
+    }
+
+    return best_index;
 }

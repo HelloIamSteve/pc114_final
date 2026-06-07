@@ -17,8 +17,8 @@ Tensor4D relu(const Tensor4D& input);
 void relu_inplace(Tensor4D& input);
 
 // for CUDA
-void relu_cuda(CudaTensor4D& input, int block_size);
-void relu_cuda(CudaMatrix& input, int block_size);
+void relu_cuda(CudaTensor4D& input, int block_size, float* compute_time_ms = nullptr);
+void relu_cuda(CudaMatrix& input, int block_size, float* compute_time_ms = nullptr);
 
 // Optional vector version, useful if you later add ReLU after FC layers.
 std::vector<float> relu_vector(const std::vector<float>& input);
@@ -56,7 +56,12 @@ public:
     Tensor4D forward(const Tensor4D& input) const;
 
     // for CUDA
-    CudaTensor4D forward_cuda(const CudaTensor4D& input, int block_size) const;
+    CudaTensor4D forward_cuda(
+        const CudaTensor4D& input,
+        int block_size,
+        float* compute_time_ms = nullptr,
+        float* malloc_time_ms = nullptr
+    ) const;
 
 private:
     int output_height(int input_h) const;
@@ -117,7 +122,12 @@ public:
     std::vector<float> forward(const std::vector<float>& input) const;
 
     // for CUDA
-    CudaMatrix forward_cuda(const CudaMatrix& input, int block_size) const;
+    CudaMatrix forward_cuda(const CudaMatrix& input,
+        int block_size,
+        float* compute_time_ms = nullptr,
+        float* transfer_time_ms = nullptr,
+        float* malloc_time_ms = nullptr
+    ) const;
 
     int getWeightSize() const {
         return cfg.out_features * cfg.in_features;

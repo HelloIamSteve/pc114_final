@@ -285,36 +285,45 @@ void CudaMatrix::release() noexcept {
     owns_data = true;
 }
 
-CudaTensor4D tensor4d_to_device(const Tensor4D& input) {
+CudaTensor4D Tensor4D_to_device(const Tensor4D& input, float* transfer_time_ms, float* malloc_time_ms) {
     if (input.N <= 0 || input.C <= 0 || input.H <= 0 || input.W <= 0) {
         throw std::invalid_argument("upload_tensor4d_cuda: input tensor has invalid shape.");
     }
 
     CudaTensor4D output(nullptr, input.N, input.C, input.H, input.W, true);
 
-    CUDA_CHECK(cudaMalloc(&output.data, sizeof(float) * input.data.size()));
-    CUDA_CHECK(cudaMemcpy(
+    // CUDA_CHECK(cudaMalloc(&output.data, sizeof(float) * input.data.size()));
+    CUDA_MALLOC_TIMED(
+        (void**) &output.data,
+        sizeof(float) * input.data.size(),
+        malloc_time_ms
+    );
+
+    CUDA_MEMCPY_TIMED(
         output.data,
         input.data.data(),
         sizeof(float) * input.data.size(),
-        cudaMemcpyHostToDevice
-    ));
+        cudaMemcpyHostToDevice,
+        transfer_time_ms
+    );
 
     return output;
 }
 
-std::vector<float> cuda_matrix_to_host(const CudaMatrix& matrix) {
+std::vector<float> cuda_matrix_to_host(const CudaMatrix& matrix, float* transfer_time_ms) {
     if (matrix.data == nullptr || matrix.N <= 0 || matrix.F <= 0) {
         throw std::invalid_argument("download_cuda_matrix: matrix has invalid shape or null data.");
     }
 
     std::vector<float> host(matrix.size(), 0.0f);
-    CUDA_CHECK(cudaMemcpy(
+
+    CUDA_MEMCPY_TIMED(
         host.data(),
         matrix.data,
         host.size() * sizeof(float),
-        cudaMemcpyDeviceToHost
-    ));
+        cudaMemcpyDeviceToHost,
+        transfer_time_ms
+    );
 
     return host;
 }

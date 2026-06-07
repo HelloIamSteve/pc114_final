@@ -177,7 +177,15 @@ std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& inpu
 }
 
 /* CUDA version */
-std::vector<std::vector<float>> LeNet::forward_batch_cuda(const Tensor4D& input, int block_size) const{
+std::vector<std::vector<float>> LeNet::forward_batch_cuda(
+    const Tensor4D& input,
+    int block_size,
+    float* cuda_compute_time_ms = nullptr,
+    float* cuda_transfer_time_ms = nullptr,
+    float* cuda_malloc_time_ms = nullptr
+)
+const{
+    // check input
     if (block_size <= 0) {
         throw std::invalid_argument("block_size must be positive.");
     }
@@ -186,27 +194,40 @@ std::vector<std::vector<float>> LeNet::forward_batch_cuda(const Tensor4D& input,
         throw std::invalid_argument("forward_batch_cuda: input tensor has invalid shape.");
     }
 
-    CudaTensor4D d_input = tensor4d_to_device(input);
+    // initialize timer
+    if (cuda_compute_time_ms != nullptr) {
+        *cuda_compute_time_ms = 0.0f;
+    }
 
-    CudaTensor4D d_y = conv1.forward_cuda(d_input, block_size);
-    relu_cuda(d_y, block_size);
-    d_y = pool1.forward_cuda(d_y, block_size);
+    if (cuda_transfer_time_ms != nullptr) {
+        *cuda_transfer_time_ms = 0.0f;
+    }
 
-    d_y = conv2.forward_cuda(d_y, block_size);
-    relu_cuda(d_y, block_size);
-    d_y = pool2.forward_cuda(d_y, block_size);
+    if(cuda_malloc_time_ms != nullptr){
+        *cuda_malloc_time_ms = 0.0f;
+    }
+
+    CudaTensor4D d_input = Tensor4D_to_device(input, cuda_transfer_time_ms);
+
+    CudaTensor4D d_y = conv1.forward_cuda(d_input, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    relu_cuda(d_y, block_size, cuda_compute_time_ms);
+    d_y = pool1.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+
+    d_y = conv2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
+    relu_cuda(d_y, block_size, cuda_compute_time_ms);
+    d_y = pool2.forward_cuda(d_y, block_size, cuda_compute_time_ms, cuda_transfer_time_ms);
 
     // flatten
     CudaMatrix d_flattened(d_y.data, d_y.N, d_y.C * d_y.H * d_y.W, false);
     
     // fully-connection layers
-    d_flattened = fc1.forward_cuda(d_flattened, block_size);
-    d_flattened = fc2.forward_cuda(d_flattened, block_size);
-    d_flattened = fc3.forward_cuda(d_flattened, block_size);
+    d_flattened = fc1.forward_cuda(d_flattened, block_size, cuda_compute_time_ms, cuda_transfer_time_ms, cuda_malloc_time_ms);
+    d_flattened = fc2.forward_cuda(d_flattened, block_size, cuda_compute_time_ms, cuda_transfer_time_ms, cuda_malloc_time_ms);
+    d_flattened = fc3.forward_cuda(d_flattened, block_size, cuda_compute_time_ms, cuda_transfer_time_ms, cuda_malloc_time_ms);
 
-    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaDeviceSynchronize());    // wait for all threads finish
 
-    std::vector<float> host_logits = cuda_matrix_to_host(d_flattened);
+    std::vector<float> host_logits = cuda_matrix_to_host(d_flattened, cuda_transfer_time_ms);
 
     std::vector<std::vector<float>> output(input.N, std::vector<float>(fc3.cfg.out_features, 0.0f));
 

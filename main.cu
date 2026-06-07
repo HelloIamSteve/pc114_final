@@ -119,9 +119,19 @@ int main(int argc, char* argv[]){
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    float cuda_compute_time_ms = 0.0f;
+    float cuda_transfer_time_ms = 0.0f;
+    float cuda_malloc_time_ms = 0.0f;
+
     // start time
     cudaEventRecord(start);
-    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(test_set.images, BLOCK_SIZE);
+    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(
+        test_set.images,
+        BLOCK_SIZE,
+        &cuda_compute_time_ms,
+        &cuda_transfer_time_ms,
+        &cuda_malloc_time_ms
+    );
 
     // end time
     cudaEventRecord(stop);
@@ -134,6 +144,10 @@ int main(int argc, char* argv[]){
     cudaEventDestroy(stop);
 
     std::cout << "Inference time: " << elapsedTime_cuda << " ms" << '\n';
+    std::cout << "CUDA compute time: " << cuda_compute_time_ms << " ms" << '\n';
+    std::cout << "CUDA transfer time (H2D + D2H): " << cuda_transfer_time_ms << " ms" << '\n';
+    std::cout << "CUDA malloc time: " << cuda_malloc_time_ms << " ms" << '\n';
+
     acc = getAccuracy(logits_cuda, test_set.labels);
     std::cout << "Accuracy: " << acc << "%" << '\n';
 

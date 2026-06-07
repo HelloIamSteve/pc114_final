@@ -44,7 +44,7 @@ class LeNet {
         std::vector<std::vector<float>> forward_batch_openmp(const Tensor4D&, int) const;
 
         // CUDA version
-        std::vector<std::vector<float>> forward_batch_cuda(const Tensor4D&, int) const;
+        std::vector<std::vector<float>> forward_batch_cuda(const Tensor4D&, int, float*, float*, float*) const;
 };
 
 typedef struct _pthreadArg{

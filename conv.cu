@@ -191,7 +191,11 @@ __global__ void conv2d_kernel(
     output[((n * C_out + oc) * out_h + oh) * out_w + ow] = sum;
 }
 
-CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input, int block_size) const {
+CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input,
+    int block_size,
+    float* compute_time_ms,
+    float* transfer_time_ms
+) const {
     if (block_size <= 0) {
         throw std::invalid_argument("Conv2D::forward_cuda: block_size must be positive.");
     }
@@ -215,24 +219,35 @@ CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input, int block_size) con
 
     // allocate & copy to device
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_weight), sizeof(float) * weight.data.size()));
-    CUDA_CHECK(cudaMemcpy(d_weight,weight.data.data(),
+    CUDA_MEMCPY_TIMED(
+        d_weight,
+        weight.data.data(),
         sizeof(float) * weight.data.size(),
-        cudaMemcpyHostToDevice
-    ));
+        cudaMemcpyHostToDevice,
+        transfer_time_ms
+    );
 
     if (cfg.use_bias) {
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&d_bias), sizeof(float) * bias.size()));
-        CUDA_CHECK(cudaMemcpy(
+        CUDA_MEMCPY_TIMED(
             d_bias,
             bias.data(),
             sizeof(float) * bias.size(),
-            cudaMemcpyHostToDevice
-        ));
+            cudaMemcpyHostToDevice,
+            transfer_time_ms
+        );
     }
 
     // const int grid_size = (output.size() + block_size - 1) / block_size;
     dim3 blockSize(block_size);
     dim3 gridSize((output.size() + blockSize.x - 1) / blockSize.x);
+
+    cudaEvent_t start, stop;
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        CUDA_CHECK(cudaEventRecord(start));
+    }
 
     conv2d_kernel<<<gridSize, blockSize>>>(
         input.data,
@@ -256,6 +271,13 @@ CudaTensor4D Conv2D::forward_cuda(const CudaTensor4D& input, int block_size) con
     );
 
     CUDA_CHECK_KERNEL();
+
+    if (compute_time_ms != nullptr) {
+        CUDA_CHECK(cudaEventRecord(stop));
+        CUDA_ADD_ELAPSED_TIME(start, stop, compute_time_ms);
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+    }
 
     CUDA_CHECK(cudaFree(d_weight));
     if (d_bias != nullptr) {
