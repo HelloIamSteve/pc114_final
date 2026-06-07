@@ -5,7 +5,6 @@
 #include <sstream>
 
 namespace {
-
 std::string join_path(const std::string& dir, const std::string& file) {
     if (dir.empty()) {
         return file;
