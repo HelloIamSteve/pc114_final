@@ -9,12 +9,6 @@
 #include "weight_loader.h"
 #include "model.h"
 
-// for CPU parallelization
-#define THREAD_NUM 6
-
-// for CUDA
-#define BLOCK_SIZE 256
-
 #define WEIGHTS_DIR "weights/"
 #define TESTING_SET_DIR "testing_set/"
 
@@ -34,11 +28,16 @@ float getAccuracy(const std::vector<std::vector<float>>& logits, const std::vect
 }
 
 int main(int argc, char* argv[]){
-    if (argc != 1) {
-        // std::cerr << "Usage: " << argv[0] << " <image_path>" << std::endl;
-        std::cerr << "Usage: " << argv[0] << '\n';
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << "<THREAD_NUM> " << "<BLOCK_SIZE>"<< '\n';
         return 1;
     }
+
+    // for CPU parallelization
+    const int THREAD_NUM = std::atoi(argv[1]);
+
+    // for CUDA
+    const int BLOCK_SIZE = std::atoi(argv[2]);
 
     /* claim model */
     LeNet lenet;
@@ -76,7 +75,7 @@ int main(int argc, char* argv[]){
     std::cout << "---------------" << '\n';
 
     /* pthread version */
-    std::cout << "Pthread version:" << '\n';
+    std::cout << "Pthread version: (" << THREAD_NUM << " threads)" << '\n';
 
     // start time
     clock_gettime(CLOCK_REALTIME, &t_start);
@@ -94,7 +93,7 @@ int main(int argc, char* argv[]){
     std::cout << "---------------" << '\n';
 
     /* OpenMP version */
-    std::cout << "OpenMP version:" << '\n';
+    std::cout << "OpenMP version: (" << THREAD_NUM << " threads)" << '\n';
 
     // start time
     clock_gettime(CLOCK_REALTIME, &t_start);

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 #include <pthread.h>
 #include <omp.h>
 
@@ -63,7 +64,7 @@ void LeNet::forward_batch(const Tensor4DView& input, std::vector<std::vector<flo
     y = conv2.forward(y);
     relu_inplace(y);
     y = pool2.forward(y);
-
+    
     for (int n = 0; n < y.N; ++n) {
         std::vector<float> flattened = flatten(y, n);
 
@@ -109,34 +110,28 @@ std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& inp
     int chunkSize = (n + thread_num - 1) / thread_num; // ceil(n / thread_num)
 
     std::vector<pthread_t> tid(thread_num);
-    std::vector<pthreadArg*> args(thread_num);
+    std::vector<pthreadArg> args(thread_num);
     std::vector<pthread_attr_t> attr(thread_num);
 
     std::vector<std::vector<float>> output(n); // pre-allocate output for all images
 
     for(int i=0; i<thread_num; i++){
         int start = i * chunkSize;
-        int end = (i == thread_num - 1) ? n : (i + 1) * chunkSize;
+        int end = std::min(start + chunkSize, n);
 
-        args[i] = (pthreadArg*)malloc(sizeof(pthreadArg));
-
-        args[i]->batch_start = start;
-        args[i]->batch_end = end;
-        args[i]->model = this;
-        args[i]->input = &input;
-        args[i]->output = &output;
-        args[i]->thread_id = i;
+        args[i].batch_start = start;
+        args[i].batch_end = end;
+        args[i].model = this;
+        args[i].input = &input;
+        args[i].output = &output;
+        args[i].thread_id = i;
 
         pthread_attr_init(&attr[i]);
-        pthread_create(&tid[i], &attr[i], threadRunner, (void*)args[i]);
+        pthread_create(&tid[i], &attr[i], threadRunner, (void*)&args[i]);
     }
 
     for(int i=0; i<thread_num; i++){
         pthread_join(tid[i], NULL);
-    }
-    
-    for(int i=0; i<thread_num; i++){
-        free(args[i]);
     }
 
     return output;
@@ -156,15 +151,16 @@ std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& inpu
     }
 
     std::vector<std::vector<float>> output(n);
+    int chunkSize = (n + thread_num - 1) / thread_num;
 
-    #pragma omp parallel num_threads(thread_num)
-    {
-        int tid = omp_get_thread_num();
+    #pragma omp parallel for num_threads(thread_num) schedule(static)
+    for (int tid = 0; tid < thread_num; ++tid) {
+        const int start = tid * chunkSize;
+        const int end = std::min(n, start + chunkSize);
 
-        int chunkSize = (n + thread_num - 1) / thread_num;
-
-        int start = tid * chunkSize;
-        int end = (tid == thread_num - 1) ? n : (tid + 1) * chunkSize;
+        if (start >= end) {
+            continue;
+        }
 
         Tensor4DView input_view(input, start, end);
 
@@ -173,7 +169,6 @@ std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& inpu
     }
 
     return output;
-
 }
 
 /* CUDA version */
