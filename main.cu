@@ -9,7 +9,11 @@
 #include "weight_loader.h"
 #include "model.h"
 
+// for CPU parallelization
 #define THREAD_NUM 6
+
+// for CUDA
+#define BLOCK_SIZE 256
 
 #define WEIGHTS_DIR "weights/"
 #define TESTING_SET_DIR "testing_set/"
@@ -117,7 +121,7 @@ int main(int argc, char* argv[]){
 
     // start time
     cudaEventRecord(start);
-    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(test_set.images, THREAD_NUM);
+    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(test_set.images, BLOCK_SIZE);
 
     // end time
     cudaEventRecord(stop);
@@ -125,6 +129,10 @@ int main(int argc, char* argv[]){
 
     float elapsedTime_cuda;
     cudaEventElapsedTime(&elapsedTime_cuda, start, stop);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
     std::cout << "Inference time: " << elapsedTime_cuda << " ms" << '\n';
     acc = getAccuracy(logits_cuda, test_set.labels);
     std::cout << "Accuracy: " << acc << "%" << '\n';

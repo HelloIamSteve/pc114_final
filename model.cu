@@ -113,7 +113,6 @@ std::vector<std::vector<float>> LeNet::forward_batch_pthread(const Tensor4D& inp
     std::vector<pthread_attr_t> attr(thread_num);
 
     std::vector<std::vector<float>> output(n); // pre-allocate output for all images
-    output.reserve(n);
 
     for(int i=0; i<thread_num; i++){
         int start = i * chunkSize;
