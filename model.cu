@@ -144,18 +144,32 @@ std::vector<std::vector<float>> LeNet::forward_batch_openmp(const Tensor4D& inpu
     
     int chunkSize = (n + thread_num - 1) / thread_num;
 
-    #pragma omp parallel for num_threads(thread_num) schedule(dynamic)
-    for (int tid = 0; tid < thread_num; ++tid) {
+    // #pragma omp parallel for num_threads(thread_num) schedule(dynamic)
+    // for (int tid = 0; tid < thread_num; ++tid) {
+    //     int start = tid * chunkSize;
+    //     int end = std::min(start + chunkSize, n);
+        
+    //     if (start >= end) {
+    //         continue;
+    //     }
+
+    //     Tensor4DView input_view(input, start, end);
+
+    //     forward_batch(input_view, output, start, true);
+    // }
+
+    #pragma omp parallel num_threads(thread_num)
+    {
+        int tid = omp_get_thread_num();
+
         int start = tid * chunkSize;
         int end = std::min(start + chunkSize, n);
-        
-        if (start >= end) {
-            continue;
+
+        if(start < end){
+            Tensor4DView input_view(input, start, end);
+
+            forward_batch(input_view, output, start, true);
         }
-
-        Tensor4DView input_view(input, start, end);
-
-        forward_batch(input_view, output, start, true);
     }
 
     return output;
