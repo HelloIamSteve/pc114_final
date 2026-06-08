@@ -67,7 +67,7 @@ int main(int argc, char* argv[]){
 
     int count = 0;
     while(count++ < TEST_NUM){
-        std::cout << "Test " << count << '\n';
+        std::cout << "Test #" << count << '\n';
 
         /* inference */
         struct timespec t_start, t_end;
