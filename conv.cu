@@ -86,7 +86,7 @@ Tensor4D conv2d_forward_impl(const Conv2D& layer, const InputTensor& input) {
         throw std::invalid_argument("Conv2D::forward: input channel mismatch.");
     }
 
-    const int out_h = (input.H + 2 * cfg.pad_h - cfg.kernel_h) / cfg.stride_h + 1;;
+    const int out_h = (input.H + 2 * cfg.pad_h - cfg.kernel_h) / cfg.stride_h + 1;
     const int out_w = (input.W + 2 * cfg.pad_w - cfg.kernel_w) / cfg.stride_w + 1;
 
     if (out_h <= 0 || out_w <= 0) {
