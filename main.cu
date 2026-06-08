@@ -28,8 +28,8 @@ float getAccuracy(const std::vector<std::vector<float>>& logits, const std::vect
 }
 
 int main(int argc, char* argv[]){
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << "<THREAD_NUM> " << "<BLOCK_SIZE>"<< '\n';
+    if (argc != 4) {
+        std::cerr << "Usage: " << argv[0] << " <THREAD_NUM>" << " <BLOCK_SIZE>" << " <TEST_NUM>"<< '\n';
         return 1;
     }
 
@@ -38,6 +38,9 @@ int main(int argc, char* argv[]){
 
     // for CUDA
     const int BLOCK_SIZE = std::atoi(argv[2]);
+
+    // for testing
+    const int TEST_NUM = std::atoi(argv[3]);
 
     /* claim model */
     LeNet lenet;
@@ -53,102 +56,135 @@ int main(int argc, char* argv[]){
     TestingSet test_set = load_testing_set_as_tensor(TESTING_SET_DIR);
     std::cout << test_set.images.N << " images loaded from testing set." << '\n';
 
-    /* inference */
-    struct timespec t_start, t_end;
+    float total_seq_time = 0.0f;
+    float total_pthread_time = 0.0f;
+    float total_openmp_time = 0.0f;
 
-    // start time
-    std::cout << "Sequential version:" << '\n';
+    float total_cuda_time = 0.0f;
+    float total_cuda_compute_time = 0.0f;
+    float total_cuda_transfer_time = 0.0f;
+    float total_cuda_malloc_time = 0.0f;
 
-    clock_gettime(CLOCK_REALTIME, &t_start);
+    int count = 0;
+    while(count++ < TEST_NUM){
+        std::cout << "Test " << count << '\n';
 
-    std::vector<std::vector<float>> logits = lenet.forward_batch(test_set.images);
-    
-    // end time
-    clock_gettime(CLOCK_REALTIME, &t_end);
-    double elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
-	elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
-    
-    std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        /* inference */
+        struct timespec t_start, t_end;
 
-    float acc = getAccuracy(logits, test_set.labels);
-    std::cout << "Accuracy: " << acc << "%" << '\n';
-    std::cout << "---------------" << '\n';
+        // start time
+        std::cout << "Sequential version:" << '\n';
 
-    /* pthread version */
-    std::cout << "Pthread version: (" << THREAD_NUM << " threads)" << '\n';
+        clock_gettime(CLOCK_REALTIME, &t_start);
 
-    // start time
-    clock_gettime(CLOCK_REALTIME, &t_start);
-    std::vector<std::vector<float>> logits_pthread = lenet.forward_batch_pthread(test_set.images, THREAD_NUM);
-    
-    // end time
-    clock_gettime(CLOCK_REALTIME, &t_end);
-    elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
-	elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
-    
-    std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        std::vector<std::vector<float>> logits = lenet.forward_batch(test_set.images);
+        
+        // end time
+        clock_gettime(CLOCK_REALTIME, &t_end);
+        double elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
+        elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
+        
+        std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        total_seq_time += elapsedTime;
 
-    acc = getAccuracy(logits_pthread, test_set.labels);
-    std::cout << "Accuracy: " << acc << "%" << '\n';
-    std::cout << "---------------" << '\n';
+        float acc = getAccuracy(logits, test_set.labels);
+        std::cout << "Accuracy: " << acc << "%" << '\n';
+        std::cout << "---------------" << '\n';
 
-    /* OpenMP version */
-    std::cout << "OpenMP version: (" << THREAD_NUM << " threads)" << '\n';
+        /* pthread version */
+        std::cout << "Pthread version: (" << THREAD_NUM << " threads)" << '\n';
 
-    // start time
-    clock_gettime(CLOCK_REALTIME, &t_start);
-    std::vector<std::vector<float>> logits_openmp = lenet.forward_batch_openmp(test_set.images, THREAD_NUM);
-    
-    // end time
-    clock_gettime(CLOCK_REALTIME, &t_end);
-    elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
-	elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
+        // start time
+        clock_gettime(CLOCK_REALTIME, &t_start);
+        std::vector<std::vector<float>> logits_pthread = lenet.forward_batch_pthread(test_set.images, THREAD_NUM);
+        
+        // end time
+        clock_gettime(CLOCK_REALTIME, &t_end);
+        elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
+        elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
+        
+        std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        total_pthread_time += elapsedTime;
 
-    std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        acc = getAccuracy(logits_pthread, test_set.labels);
+        std::cout << "Accuracy: " << acc << "%" << '\n';
+        std::cout << "---------------" << '\n';
 
-    acc = getAccuracy(logits_openmp, test_set.labels);
-    std::cout << "Accuracy: " << acc << "%" << '\n';
-    std::cout << "---------------" << '\n';
+        /* OpenMP version */
+        std::cout << "OpenMP version: (" << THREAD_NUM << " threads)" << '\n';
 
-    /* CUDA version */
-    std::cout << "CUDA version:" << '\n';
+        // start time
+        clock_gettime(CLOCK_REALTIME, &t_start);
+        std::vector<std::vector<float>> logits_openmp = lenet.forward_batch_openmp(test_set.images, THREAD_NUM);
+        
+        // end time
+        clock_gettime(CLOCK_REALTIME, &t_end);
+        elapsedTime = (t_end.tv_sec - t_start.tv_sec) * 1000.0;
+        elapsedTime += (t_end.tv_nsec - t_start.tv_nsec) / 1000000.0;
 
-    // start time
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+        std::cout << "Inference time: " << elapsedTime << " ms" << '\n';
+        total_openmp_time += elapsedTime;
 
-    float cuda_compute_time_ms = 0.0f;
-    float cuda_transfer_time_ms = 0.0f;
-    float cuda_malloc_time_ms = 0.0f;
+        acc = getAccuracy(logits_openmp, test_set.labels);
+        std::cout << "Accuracy: " << acc << "%" << '\n';
+        std::cout << "---------------" << '\n';
 
-    // start time
-    cudaEventRecord(start);
-    std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(
-        test_set.images,
-        BLOCK_SIZE,
-        &cuda_compute_time_ms,
-        &cuda_transfer_time_ms,
-        &cuda_malloc_time_ms
-    );
+        /* CUDA version */
+        std::cout << "CUDA version:" << '\n';
 
-    // end time
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
+        // start time
+        cudaEvent_t start, stop;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
 
-    float elapsedTime_cuda;
-    cudaEventElapsedTime(&elapsedTime_cuda, start, stop);
+        float cuda_compute_time_ms = 0.0f;
+        float cuda_transfer_time_ms = 0.0f;
+        float cuda_malloc_time_ms = 0.0f;
 
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+        // start time
+        cudaEventRecord(start);
+        std::vector<std::vector<float>> logits_cuda = lenet.forward_batch_cuda(
+            test_set.images,
+            BLOCK_SIZE,
+            &cuda_compute_time_ms,
+            &cuda_transfer_time_ms,
+            &cuda_malloc_time_ms
+        );
 
-    std::cout << "Inference time: " << elapsedTime_cuda << " ms" << '\n';
-    std::cout << "CUDA compute time: " << cuda_compute_time_ms << " ms" << '\n';
-    std::cout << "CUDA transfer time (H2D + D2H): " << cuda_transfer_time_ms << " ms" << '\n';
-    std::cout << "CUDA malloc time: " << cuda_malloc_time_ms << " ms" << '\n';
+        // end time
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
 
-    acc = getAccuracy(logits_cuda, test_set.labels);
-    std::cout << "Accuracy: " << acc << "%" << '\n';
+        float elapsedTime_cuda;
+        cudaEventElapsedTime(&elapsedTime_cuda, start, stop);
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+
+        std::cout << "Inference time: " << elapsedTime_cuda << " ms" << '\n';
+        std::cout << "CUDA compute time: " << cuda_compute_time_ms << " ms" << '\n';
+        std::cout << "CUDA transfer time (H2D + D2H): " << cuda_transfer_time_ms << " ms" << '\n';
+        std::cout << "CUDA malloc time: " << cuda_malloc_time_ms << " ms" << '\n';
+        
+        total_cuda_time += elapsedTime_cuda;
+        total_cuda_compute_time += cuda_compute_time_ms;
+        total_cuda_transfer_time += cuda_transfer_time_ms;
+        total_cuda_malloc_time += cuda_malloc_time_ms;
+
+        acc = getAccuracy(logits_cuda, test_set.labels);
+        std::cout << "Accuracy: " << acc << "%" << '\n';
+        
+        std::cout << "---------------" << '\n';
+    }
+
+    std::cout << "\nAverage inference time:" << '\n';
+    std::cout << "Sequential version: " << total_seq_time / count << " ms" << '\n';
+    std::cout << "Pthread version: " << total_pthread_time / count << " ms" << '\n';
+    std::cout << "OpenMP version: " << total_openmp_time / count << " ms" << '\n';
+    std::cout << "CUDA version: " << total_cuda_time / count << " ms" << '\n';
+    std::cout << "compute / transfer / malloc: " << total_cuda_compute_time / count<< " / "
+                                                 << total_cuda_transfer_time / count << " / "
+                                                 << total_cuda_malloc_time / count << " ms" << '\n';
 
     return 0;
 }
