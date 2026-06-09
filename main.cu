@@ -178,13 +178,13 @@ int main(int argc, char* argv[]){
     }
 
     std::cout << "\nAverage inference time:" << '\n';
-    std::cout << "Sequential version: " << total_seq_time / count << " ms" << '\n';
-    std::cout << "Pthread version: " << total_pthread_time / count << " ms" << '\n';
-    std::cout << "OpenMP version: " << total_openmp_time / count << " ms" << '\n';
-    std::cout << "CUDA version: " << total_cuda_time / count << " ms" << '\n';
-    std::cout << "compute / transfer / malloc: " << total_cuda_compute_time / count<< " / "
-                                                 << total_cuda_transfer_time / count << " / "
-                                                 << total_cuda_malloc_time / count << " ms" << '\n';
+    std::cout << "Sequential version: " << total_seq_time / TEST_NUM << " ms" << '\n';
+    std::cout << "Pthread version: " << total_pthread_time / TEST_NUM << " ms" << '\n';
+    std::cout << "OpenMP version: " << total_openmp_time / TEST_NUM << " ms" << '\n';
+    std::cout << "CUDA version: " << total_cuda_time / TEST_NUM << " ms" << '\n';
+    std::cout << "compute / transfer / malloc: " << total_cuda_compute_time / TEST_NUM<< " / "
+                                                 << total_cuda_transfer_time / TEST_NUM << " / "
+                                                 << total_cuda_malloc_time / TEST_NUM << " ms" << '\n';
 
     return 0;
 }
